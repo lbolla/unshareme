@@ -85,5 +85,5 @@ func main() {
 	router.HandleFunc("/", EncodeHandler).Methods("GET")
 	router.HandleFunc("/{enc}", DecodeHandler).Methods("GET").Name("Decode")
 	http.Handle("/", router)
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(":7001", nil))
 }
