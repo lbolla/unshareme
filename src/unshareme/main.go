@@ -17,6 +17,9 @@ var name = "name"
 var sc = securecookie.New(hashKey, blockKey)
 var router = mux.NewRouter()
 
+// TODO
+// - use struct to store info
+
 func encode(msg string, r *http.Request) (string, error) {
 	msg += "|" + remoteIP(r)
 	enc, err := sc.Encode(name, msg)
@@ -43,14 +46,23 @@ func decode(enc string, r *http.Request) (string, error) {
 
 	tokens := strings.Split(msg, "|")
 	if tokens[1] != remoteIP(r) {
+		log.Print(tokens[1], remoteIP(r))
 		return "", errors.New("Invalid IP")
 	}
 
 	return tokens[0], nil
 }
 
+// Only works for IPv4, like 127.0.0.1:12345, not IPv6 like [::1]:12345
 func remoteIP(r *http.Request) string {
-	return strings.Split(r.RemoteAddr, "]")[0][1:]
+	// Get it from headers, as set by nginx
+	ip := r.Header.Get("X-Real-IP")
+	if ip == "" {
+		// Strips port number
+		ip = strings.Split(r.RemoteAddr, ":")[0]
+	}
+	log.Print("IP:", ip)
+	return ip
 }
 
 func EncodeHandler(w http.ResponseWriter, r *http.Request) {
