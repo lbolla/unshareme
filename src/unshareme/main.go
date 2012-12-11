@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/mux"
+	"html/template"
 	"log"
 	"net/http"
 	"net/url"
@@ -25,6 +26,10 @@ type PersonalURL struct {
 	URI string
 	IP string
 }
+
+// Templates
+// TODO: relative paths to templates
+var templates = template.Must(template.ParseFiles("src/unshareme/tmpl/index.html"))
 
 func encode(msg PersonalURL) (string, error) {
 	enc, err := sc.Encode(encodeName, msg)
@@ -59,8 +64,15 @@ func remoteIP(r *http.Request) string {
 		// Strips port number
 		ip = strings.Split(r.RemoteAddr, ":")[0]
 	}
-	log.Print("IP:", ip)
+//         log.Print("IP:", ip)
 	return ip
+}
+
+func MainHandler(w http.ResponseWriter, r *http.Request) {
+	err := templates.ExecuteTemplate(w, "index.html", nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func EncodeHandler(w http.ResponseWriter, r *http.Request) {
@@ -68,6 +80,11 @@ func EncodeHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Print(err.Error())
 		http.Error(w, "", http.StatusBadRequest)
+		return
+	}
+
+	if u.Scheme == "" {
+		http.Error(w, "Invalid scheme", http.StatusBadRequest)
 		return
 	}
 
@@ -80,8 +97,7 @@ func EncodeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	link, _ := router.Get("Decode").URL("enc", enc)
-	fmt.Fprintf(w, "<a href=\"%s\">Link</a>", link.String())
-//         fmt.Fprint(w, link.String())
+	fmt.Fprint(w, link.String())
 }
 
 func DecodeHandler(w http.ResponseWriter, r *http.Request) {
@@ -105,8 +121,9 @@ func DecodeHandler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	router.Handle("/favicon.ico", http.NotFoundHandler())
-	router.HandleFunc("/", EncodeHandler).Methods("GET")
-	router.HandleFunc("/{enc}", DecodeHandler).Methods("GET").Name("Decode")
+	router.HandleFunc("/", MainHandler).Methods("GET")
+	router.HandleFunc("/enc", EncodeHandler).Methods("GET")
+	router.HandleFunc("/dec/{enc}", DecodeHandler).Methods("GET").Name("Decode")
 	http.Handle("/", router)
 	log.Fatal(http.ListenAndServe(":7001", nil))
 }
