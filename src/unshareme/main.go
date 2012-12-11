@@ -2,27 +2,32 @@ package main
 
 import (
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/mux"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
+// Random stuff for encoding
 var hashKey = securecookie.GenerateRandomKey(32)
 var blockKey = securecookie.GenerateRandomKey(32)
-var name = "name"
+var encodeName = "encodeName"
 var sc = securecookie.New(hashKey, blockKey)
+
+// Router for handlers
 var router = mux.NewRouter()
 
-// TODO
-// - use struct to store info
+// Store URI and IP together
+type PersonalURL struct {
+	URI string
+	IP string
+}
 
-func encode(msg string, r *http.Request) (string, error) {
-	msg += "|" + remoteIP(r)
-	enc, err := sc.Encode(name, msg)
+func encode(msg PersonalURL) (string, error) {
+	enc, err := sc.Encode(encodeName, msg)
 	if err != nil {
 		return "", err
 	}
@@ -32,25 +37,18 @@ func encode(msg string, r *http.Request) (string, error) {
 	return b64enc, nil
 }
 
-func decode(enc string, r *http.Request) (string, error) {
+func decode(enc string) (msg PersonalURL, err error) {
 	b64enc, err := base64.URLEncoding.DecodeString(enc)
 	if err != nil {
-		return "", err
+		return
 	}
 
-	var msg string
-	err = sc.Decode(name, string(b64enc), &msg)
+	err = sc.Decode(encodeName, string(b64enc), &msg)
 	if err != nil {
-		return "", err
+		return
 	}
 
-	tokens := strings.Split(msg, "|")
-	if tokens[1] != remoteIP(r) {
-		log.Print(tokens[1], remoteIP(r))
-		return "", errors.New("Invalid IP")
-	}
-
-	return tokens[0], nil
+	return
 }
 
 // Only works for IPv4, like 127.0.0.1:12345, not IPv6 like [::1]:12345
@@ -66,9 +64,15 @@ func remoteIP(r *http.Request) string {
 }
 
 func EncodeHandler(w http.ResponseWriter, r *http.Request) {
-	msg := r.URL.Query().Get("msg")
+	u, err := url.Parse(r.URL.Query().Get("u"))
+	if err != nil {
+		log.Print(err.Error())
+		http.Error(w, "", http.StatusBadRequest)
+		return
+	}
 
-	enc, err := encode(msg, r)
+	msg := PersonalURL{URI: u.String(), IP: remoteIP(r)}
+	enc, err := encode(msg)
 	if err != nil {
 		log.Print(err.Error())
 		http.Error(w, "", http.StatusBadRequest)
@@ -82,13 +86,20 @@ func EncodeHandler(w http.ResponseWriter, r *http.Request) {
 
 func DecodeHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	dec, err := decode(vars["enc"], r)
+	dec, err := decode(vars["enc"])
 	if err != nil {
 		log.Print(err.Error())
 		http.Error(w, "", http.StatusBadRequest)
 		return
 	}
-	http.Redirect(w, r, dec, http.StatusFound)
+
+	if rip := remoteIP(r); dec.IP != rip {
+		log.Print(dec.IP, rip)
+		http.Error(w, "", http.StatusBadRequest)
+		return
+	}
+
+	http.Redirect(w, r, dec.URI, http.StatusFound)
 	return
 }
 
