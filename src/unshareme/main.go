@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/base64"
+	"flag"
 	"fmt"
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/mux"
@@ -9,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 )
 
@@ -27,9 +29,9 @@ type PersonalURL struct {
 	IP string
 }
 
-// Templates
-// TODO: relative paths to templates
-var templates = template.Must(template.ParseFiles("src/unshareme/tmpl/index.html"))
+// Flags
+var templates_path = flag.String("t", "src/unshareme/tmpl/", "Path to the templates")
+var templates = template.New("")
 
 func encode(msg PersonalURL) (string, error) {
 	enc, err := sc.Encode(encodeName, msg)
@@ -120,6 +122,8 @@ func DecodeHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	flag.Parse()
+	templates = template.Must(template.ParseFiles(filepath.Join(*templates_path, "index.html")))
 	router.Handle("/favicon.ico", http.NotFoundHandler())
 	router.HandleFunc("/", MainHandler).Methods("GET")
 	router.HandleFunc("/enc", EncodeHandler).Methods("GET")
